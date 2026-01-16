@@ -1,5 +1,9 @@
+
+# define LLMs model that generates responses to the requests
+
 def fake_llm(messages, persona):
 
+# user_input is used for comparing the request with keywords, it's not currently activated but you will use it if neccessary
     user_input = messages[-1]["content"]
 
     if persona == "tutor":

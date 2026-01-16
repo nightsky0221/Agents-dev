@@ -1,5 +1,7 @@
 import chatbot
 
+# Shows various chatbot responses according to the user input prompts.
+
 chatbot.chat("Tell me about token and how we realize the tokenization.")
 chatbot.chat("Where is the capital of France?")
 
