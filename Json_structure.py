@@ -3,7 +3,11 @@ import llm
 
 OUTPUT_SCHEMA = {
     "answer": "string",
-    "confidence": "number between 0 and 1"
+    "confidence": "number between 0 and 1",
+    "tool_request": {
+        "tool": "string",
+        "arguments": "object"
+    },
 }
 
 JSON_SYSTEM_PROMPT = {
@@ -12,6 +16,8 @@ JSON_SYSTEM_PROMPT = {
         "You must respond ONLY in valid JSON. "
         "Do not include explanations, comments, or extra text. "
         "The JSON must strictly follow the provided schema. "
+        "- calculator(expression: string)\n"
+        "If no tool is needed, set tool_request to null. "
     )
 }
 
@@ -54,3 +60,8 @@ def structured_chat(user_input):
     messages = build_json_prompt(user_input, persona_prompt=None)
     raw_response = llm.llm_call(messages, persona="other")
     return parse_and_validate(raw_response)
+
+TOOL_REQUEST_SCHEMA = {
+    "tool": "string",
+    "arguments": "object"
+}

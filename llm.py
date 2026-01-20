@@ -21,8 +21,14 @@ def llm_call(messages, persona):
 
     if json_mode:
         return json.dumps({
-            "answer": "This is a structured answer to your question.",
-            "confidence": 0.2
+            "answer": "I will calculate this using a calculator",
+            "confidence": 0.9,
+            "tool_request": {
+                "tool": "calculator",
+                "arguments": {
+                    "expression": "23 * 17"
+                }
+            }
         })
 
     # user_input is used for comparing the request with keywords, it's not currently activated but you will use it if neccessary

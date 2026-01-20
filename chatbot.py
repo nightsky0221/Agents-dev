@@ -5,6 +5,8 @@ import summary as summarize
 import Json_structure as js
 from llm import call_llm_with_retries
 import check as chk
+import tools
+import guardrails as gd
 
 # create conversation store to read the user requests, send reponses and save histories by per persona.
 conversations = {"tutor": [], "support": [], "other": []}
@@ -21,6 +23,7 @@ def trim_memory(messages, max_memory=6):
 # define summarization variables
 SUMMARY_TRIGGER = 8
 MAX_TURN = 4
+
 conversation_summaries = {
     "tutor": "",
     "support": "",
@@ -31,6 +34,11 @@ conversation_summaries = {
 def chat(user_input, persona=None):
 
     global global_conversation, conversations, conversation_summaries
+
+    try:
+        gd.guard_input(user_input)
+    except ValueError as e:
+        return {"error": str(e)}
 
     if persona is None:
         persona = rt.route_persona(user_input)    
@@ -90,24 +98,24 @@ def chat(user_input, persona=None):
     #     return "success"
     # return "normal"
 
-    # send the message to call the LLMs to get a response according to the request.
-    response = llm.llm_call(messages, persona)
+    # tool request
+    persona_prompt = ps.personas.get(persona, ps.personas["other"])
+    summary_text = conversation_summaries[persona]
 
-    try:
-        response = call_llm_with_retries(
-            messages=messages,
-            call_fn=llm.llm_call,
-            persona=persona
-        )
-        parsed = js.parse_and_validate(response)
+    # Run Agent loop
+    parsed = run_agent_loop(
+        persona=persona,
+        persona_prompt=persona_prompt,
+        summary=summary_text,
+        conversation=conversations[persona],
+        llm_call_fn=llm.llm_call
+    )
     
-    except Exception as e:
-        parsed = {
-            "answer": "I'm unable to generate a reliable response right now.",
-            "confidence":0.0,
-            "error":str(e)
-        }
-    
+    # ensure parsed exists
+    if parsed is None:
+        return {"error": "Agent loop returned no response"}
+
+    # print("DEBUG parsed:", parsed)
     # using confidence check
     issues = chk.basic_confidence_check(parsed)
     if issues:
@@ -121,7 +129,7 @@ def chat(user_input, persona=None):
             "This response may be unreliable. "
             "Consider asking a more specific question."
         )
-
+  
     # refuse mode not now available, it's off by default now but later we will use that.
     # if should_refuse(parsed):
     #     parsed["answer"] = "I can't provide a reliable answer to that."
@@ -132,7 +140,7 @@ def chat(user_input, persona=None):
     assistant_msg = {
         "role": "assistant",
         "persona": persona,
-        "content": response
+        "content": parsed.get("answer", "")
     }
 
     # add LLMs response to conversation
@@ -144,7 +152,7 @@ def chat(user_input, persona=None):
     global_conversation = trim_global(global_conversation)
 
     # send the response to the user
-    return response
+    return parsed
 
 # a reset function to initialize the conversation history
 def reset_conversation():
@@ -156,19 +164,21 @@ def reset_conversation():
 # new chat function to use json_structure
 
 def chat_json(user_input, persona=None):
-    # Returns a JSON-structured response validated against OUTPUT_SCHEMA
+    try:
+        gd.guard_input(user_input)
+    except ValueError as e:
+        return {"error": str(e)}
 
+
+    # Returns a JSON-structured response validated against OUTPUT_SCHEMA
     if persona is None:
         persona = rt.route_persona(user_input)
 
     messages = []
 
-    # Add persona instruction BEFORE JSON system message, persona instruction first
     persona_prompt = ps.personas.get(persona, ps.personas["other"])
-    # JSON enforcement second
-    messages.append(js.JSON_SYSTEM_PROMPT)
-    # Build JSON-enforced prompt
-    messages = js.build_json_prompt(user_input, persona_prompt)
+    messages = [persona_prompt]
+    messages.extend(js.build_json_prompt(user_input, persona_prompt))
 
     # Add retry failure
     raw_response = call_llm_with_retries(
@@ -198,6 +208,71 @@ def chat_json(user_input, persona=None):
     }
     parsed["action"] = chk.decide_response_action(parsed)
 
-    print("DEBUG parsed object:", parsed)
-    
+    return parsed
+
+def build_messages(persona_prompt, summary, conversation):
+    messages = [persona_prompt]
+
+    if summary:
+        messages.append({
+            "role": "system",
+            "content": f"Conversation summary:\n{summary}"
+        })
+
+    messages.extend([
+        {"role": m["role"], "content": m["content"]}
+        for m in conversation
+    ])
+    return messages
+
+MAX_AGENT_STEPS = 3
+
+def run_agent_loop(persona, persona_prompt, summary, conversation, llm_call_fn):
+    parsed = None
+    steps = 0
+
+    while steps < MAX_AGENT_STEPS:
+        messages = [
+            persona_prompt,
+            js.JSON_SYSTEM_PROMPT
+        ]
+
+        if summary:
+            messages.append({
+                "role": "system",
+                "content": f"Conversation summary:\n{summary}"
+            })
+        
+        messages.extend([
+            {"role": m["role"], "content": m["content"]}
+            for m in conversation
+        ])
+
+        raw = call_llm_with_retries(messages=messages, call_fn=llm_call_fn, persona=persona)
+        parsed = js.parse_and_validate(raw)
+
+        tool_request = parsed.get("tool_request")
+
+        if not tool_request:
+            break
+
+        tool_name = tool_request.get("tool")
+        arguments = tool_request.get("arguments", {})
+
+        if tool_name not in tools.TOOLS:
+            parsed["tool_error"] = f"Unknown tool: {tool_name}"
+            break
+
+        result = tools.TOOLS[tool_name]["function"](**arguments)
+
+        if parsed is None:
+            raise RuntimeError("Agent loop exited without producing a response")
+
+        conversation.append({
+            "role": "system",
+            "content": f"Tool result ({tool_name}): {result}"
+        })
+
+        steps += 1
+
     return parsed

@@ -29,5 +29,9 @@ personas = {
             "Please ask a more detailed question. "
         )
 
+    },
+    "tool_request": {
+        "tool": "",
+        "arguments": {}
     }
 }
