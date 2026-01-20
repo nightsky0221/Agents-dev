@@ -3,6 +3,8 @@ import persona as ps
 import llm
 import summary as summarize
 import Json_structure as js
+from llm import call_llm_with_retries
+import check as chk
 
 # create conversation store to read the user requests, send reponses and save histories by per persona.
 conversations = {"tutor": [], "support": [], "other": []}
@@ -53,12 +55,16 @@ def chat(user_input, persona=None):
         # extract system messages and cut the old messages from whole conversation histories.
         old_messages = conversations[persona][:-MAX_TURN]
         chunk = summarize.extract_user_assistant_messages(old_messages)
+        chunk_safe = [
+            msg for msg in chunk
+            if msg["role"] != "user" or summarize.is_memory_safe(msg["content"])
+        ]
 
         # summarize the old messages and limit the summarization up to its maximum size
         conversation_summaries[persona] = summarize.clamp_summary(
             summarize.update_summary(
                 conversation_summaries[persona],
-                chunk
+                chunk_safe
             )
         )
         # keep the latest conversations
@@ -87,6 +93,42 @@ def chat(user_input, persona=None):
     # send the message to call the LLMs to get a response according to the request.
     response = llm.llm_call(messages, persona)
 
+    try:
+        response = call_llm_with_retries(
+            messages=messages,
+            call_fn=llm.llm_call,
+            persona=persona
+        )
+        parsed = js.parse_and_validate(response)
+    
+    except Exception as e:
+        parsed = {
+            "answer": "I'm unable to generate a reliable response right now.",
+            "confidence":0.0,
+            "error":str(e)
+        }
+    
+    # using confidence check
+    issues = chk.basic_confidence_check(parsed)
+    if issues:
+        parsed["warnings"] = issues
+
+    # decision logic implementation
+    action = chk.decide_response_action(parsed)
+
+    if action =="warn":
+        parsed["notice"] = (
+            "This response may be unreliable. "
+            "Consider asking a more specific question."
+        )
+
+    # refuse mode not now available, it's off by default now but later we will use that.
+    # if should_refuse(parsed):
+    #     parsed["answer"] = "I can't provide a reliable answer to that."
+    #     parsed["confidence"] = 0.0
+
+
+    # set the assistant messages
     assistant_msg = {
         "role": "assistant",
         "persona": persona,
@@ -122,11 +164,40 @@ def chat_json(user_input, persona=None):
     messages = []
 
     # Add persona instruction BEFORE JSON system message, persona instruction first
-    messages.append(ps.personas.get(persona, ps.personas["other"]))
+    persona_prompt = ps.personas.get(persona, ps.personas["other"])
     # JSON enforcement second
     messages.append(js.JSON_SYSTEM_PROMPT)
     # Build JSON-enforced prompt
-    messages = js.build_json_prompt(user_input, persona)
+    messages = js.build_json_prompt(user_input, persona_prompt)
 
-    response = llm.llm_call(messages, persona)
-    return js.parse_and_validate(response)
+    # Add retry failure
+    raw_response = call_llm_with_retries(
+        messages=messages,
+        call_fn=llm.llm_call,
+        persona=persona
+    )
+    parsed = js.parse_and_validate(raw_response)
+
+    # using confidence check
+    issues = chk.basic_confidence_check(parsed)
+    if issues:
+        parsed["warnings"] = issues
+
+    # evaluation
+    evaluation = chk.evaluate_answer(parsed["answer"], persona)
+    
+    if not isinstance(evaluation, dict):
+        evaluation = {
+            "score": 0.0,
+            "issues": ["Evaluation missing or invalid"]
+        }
+    
+    parsed["evaluation"] = evaluation or {
+        "score": 0.0,
+        "issues": ["Missing evaluation"]
+    }
+    parsed["action"] = chk.decide_response_action(parsed)
+
+    print("DEBUG parsed object:", parsed)
+    
+    return parsed

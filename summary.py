@@ -54,3 +54,7 @@ def update_summary(old_summary, conversation_chunk):
 
 def fake_summarizer(messages):
     return "Summary of key facts and goals so far."
+
+def is_memory_safe(text: str) -> bool:
+    forbidden = ["remember", "store this", "save this", "add to memory"]
+    return not any(f in text.lower() for f in forbidden)

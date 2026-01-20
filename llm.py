@@ -9,7 +9,7 @@ def llm_call(messages, persona):
         isinstance(m, dict)
         and m.get("role") == "system"
         and isinstance(m.get("content"), str)
-        and "ONLY in valid JSON" in m["content"]
+        and "valid JSON" in m["content"]
         for m in messages
     )
 
@@ -21,8 +21,8 @@ def llm_call(messages, persona):
 
     if json_mode:
         return json.dumps({
-            "answer": "This is a structured response to your question.",
-            "confidence": 0.85
+            "answer": "This is a structured answer to your question.",
+            "confidence": 0.2
         })
 
     # user_input is used for comparing the request with keywords, it's not currently activated but you will use it if neccessary
@@ -40,12 +40,13 @@ def llm_call(messages, persona):
                 "- Different models use different tokenizers."
         ]
         # if not any(k in user_input for k in nlp_keywords):
-        return(
+        return (
                 # "- I can help with NLP and LLM topics only.\n"
                 # "- This question is outside my scope.\n"
                 # "- Please ask another NLP-related question.\n"
             "\n".join(bullets[:5]) +
             "\nWhat part of tokenization would you like to explore next?"
+            # {"answer": "hi", "confidence": 0.2}
         )
         
         # return "Tutor-style response(step-by-step)."
@@ -73,3 +74,21 @@ def llm_call(messages, persona):
         "This request doesn't fall under NLP tutoring or product support. "
         "Could you please clarify or provide more details?"
     )
+
+MAX_RETRIES = 3
+
+class LLMError(Exception):
+    pass
+
+def call_llm_with_retries(messages, call_fn, persona):
+    last_error = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            raw = call_fn(messages, persona)
+            return raw
+        except Exception as e:
+            last_error = e
+            print(f"[LLM] Attempt {attempt} failed: {e}")
+
+    raise LLMError("LLM failed after max retries") from last_error
