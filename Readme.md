@@ -1,51 +1,184 @@
-Natural Language Processing - n-grams statistics
-===
 
-![NGrams CI](https://github.com/pprzetacznik/nlp-n-grams/workflows/NGrams%20CI/badge.svg)
+# Modular AI Chatbot & Agent Framework
 
-Run:
-```
-$ pip install -r requirements.txt
-$ python -m ngrams --train-dir train_corpus --n-gram 3 --test-file test_corpus/thewire.txt
-Processing file: train_corpus/2momm10.txt
-Processing file: train_corpus/4momm10.txt
-Processing file: train_corpus/54.txt
-Processing file: train_corpus/5momm10.txt
-Processing file: train_corpus/8momm10.txt
-Processing file: train_corpus/finnish.txt
-Processing file: train_corpus/finnish1.txt
-Processing file: train_corpus/Harry Potter 1 Sorcerer's_Stone.txt
-Processing file: train_corpus/Harry Potter 2 Chamber_of_Secrets.txt
-Processing file: train_corpus/Harry Potter 3 Prisoner of Azkaban.txt
-Processing file: train_corpus/Harry Potter 4 and the Goblet of Fire.txt
-Processing file: train_corpus/polski.txt
-Processing file: train_corpus/polski2.txt
-Processing file: train_corpus/polski3.txt
-Processing file: train_corpus/q.txt
-Processing file: train_corpus/spanish.txt
-Processing file: train_corpus/spanish1.txt
-######## RECOMMENDATIONS ###########
-Harry Potter 1 Sorcerer's_Stone.txt  :  0.8516218202150778
-Harry Potter 4 and the Goblet of Fire.txt  :  0.8382954018753523
-Harry Potter 3 Prisoner of Azkaban.txt  :  0.8297737283348564
-Harry Potter 2 Chamber_of_Secrets.txt  :  0.8286664546220112
-q.txt  :  0.2687367480112696
-54.txt  :  0.2654665173972638
-spanish1.txt  :  0.2157763828702334
-8momm10.txt  :  0.20948116826277266
-5momm10.txt  :  0.20088947556841405
-4momm10.txt  :  0.20052011673047865
-2momm10.txt  :  0.1900199333318412
-spanish.txt  :  0.18425240798457684
-finnish.txt  :  0.1749251467750644
-finnish1.txt  :  0.17453271188273536
-polski.txt  :  0.12179996712775056
-polski3.txt  :  0.09870171027877826
-polski2.txt  :  0.09401455065003979
-```
+## Overview
 
-## Tests
+This project is a **modular AI chatbot and agent framework** built on top of a local Large Language Model (LLM) using **Ollama**.  
+It demonstrates how to design a structured, safe, and extensible AI system with persona routing, tool usage, and controlled agent loops.
+
+The framework is intended for **learning, experimentation, and prototyping** modern LLM-based systems rather than direct production deployment.
+
+---
+
+## Core Capabilities
+
+- **Persona-Based Conversation Handling**
+  - Automatically routes user queries to the most appropriate persona.
+- **Agent Loop Architecture**
+  - Enables multi-step reasoning with bounded execution.
+- **Tool Invocation**
+  - Allows the LLM to request and execute tools through a validated interface.
+- **Strict JSON Output Enforcement**
+  - Ensures predictable and machine-readable responses.
+- **Prompt Injection Guardrails**
+  - Detects and blocks common prompt-injection attempts.
+- **Conversation Memory Management**
+  - Maintains scoped memory per persona with size limits.
+- **Robust Error Handling & Retries**
+  - Handles malformed model outputs safely.
+
+---
+
+## Project Structure
 
 ```
-$ pytest
+.
+├── agent_loop.py        # Core agent loop logic
+├── chatbot.py           # Chat interface and conversation manager
+├── guardrails.py        # Prompt injection protection
+├── Json_structure.py    # JSON schema definitions and validation
+├── llm.py               # LLM wrapper (Ollama integration)
+├── persona.py           # Persona definitions and system prompts
+├── router.py            # Persona routing logic
+├── tools.py             # Tool registry and execution
+├── run.py               # Example entry point
+└── README.md
 ```
+
+---
+
+## System Architecture
+
+```
+User Input
+   ↓
+Guardrails (Injection Detection)
+   ↓
+Persona Router
+   ↓
+Conversation Store
+   ↓
+Agent Loop
+   ├─ LLM Call
+   ├─ Tool Request (Optional)
+   └─ Tool Execution
+   ↓
+Validated JSON Response
+```
+
+---
+
+## Personas
+
+Defined in `persona.py`:
+
+- **Tutor**
+  - Explains NLP, LLM, and AI concepts step-by-step.
+- **Support**
+  - Handles error reports, bugs, and product-related issues.
+- **Other**
+  - Default fallback persona.
+
+Each persona injects a system-level instruction to guide LLM behavior.
+
+---
+
+## Tools
+
+Tools are defined in `tools.py` and executed only after validation.
+
+### Available Tools
+
+- **calculator**
+  - Safely evaluates mathematical expressions.
+
+Tools are:
+- Explicitly requested by the LLM
+- Validated against a registry
+- Executed in a controlled environment
+
+---
+
+## JSON Response Schema
+
+All structured responses must follow this schema:
+
+```json
+{
+  "type": "chat | tool | error",
+  "answer": "string",
+  "confidence": 0.0,
+  "tool_request": null | {
+    "tool": "string",
+    "arguments": {}
+  }
+}
+```
+
+This ensures:
+- Predictable outputs
+- Safe downstream consumption
+- Reliable tool invocation
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or later
+- Ollama installed and running
+- `llama3` model pulled locally
+
+```bash
+ollama pull llama3
+```
+
+---
+
+### Running the Example
+
+```bash
+python run.py
+```
+
+Example usage:
+
+```python
+response = chat("Explain tokenization in NLP.")
+print(response["answer"])
+```
+
+---
+
+## Intended Use Cases
+
+- Learning how LLM-based chat systems are structured
+- Experimenting with agent loops and tool calling
+- Building structured JSON-based AI APIs
+- Prototyping persona-driven chatbots
+
+---
+
+## Limitations
+
+- Token estimation is approximate
+- Tools are synchronous
+- JSON compliance depends on LLM output quality
+- Not optimized for production workloads
+
+---
+
+## Future Enhancements
+
+- Asynchronous tool execution
+- Additional tools (search, summarization, RAG)
+- Persistent storage for conversation memory
+- Streaming responses
+- Improved token accounting
+
+---
+
+## License
+
+This project is provided for **educational and experimental purposes**.
