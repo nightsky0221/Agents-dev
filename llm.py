@@ -1,9 +1,26 @@
 import json
+import time
 
-# define LLMs model that generates responses to the requests
+
+LLM_CONFIG = {
+    "temperature": 0.0,
+    "top": 1.0,
+    "max_tokens": 512,
+}
+
+
 
 def llm_call(messages, persona):
-     
+
+    return generate_llm_response(messages, config=LLM_CONFIG)
+
+    MAX_TOKENS_PER_CALL = 500
+    estimated = estimate_token(messages)
+    if estimated > MAX_TOKENS_PER_CALL:
+        raise RuntimeError(
+            f"Token budget exceeded: {estimated} > {MAX_TOKENS_PER_CALL}"
+        )
+
     # Detect JSON-enforced mode
     json_mode = any(
         isinstance(m, dict)
@@ -86,20 +103,106 @@ def llm_call(messages, persona):
 
 
 
-MAX_RETRIES = 3
+
+
+def estimate_token(messages: list[dict]) -> int:
+    """
+    rough token estimator
+    1 token ~ 4 characters (safe approximation).
+    """
+    total_chars = 0
+    for msg in messages:
+        total_chars += len(msg.get("content", ""))
+    return total_chars // 4
+
+
+
+
+FORMAT_CORRECTION = """
+Your previous response did not match the required JSON schema.
+Return ONLY valid JSON.
+Do not include explanations, markdown, or extra text.
+"""
 
 class LLMError(Exception):
     pass
 
 def call_llm_with_retries(messages, call_fn, persona):
-    last_error = None
+    MAX_RETRIES = 3
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             raw = call_fn(messages, persona)
             return raw
-        except Exception as e:
-            last_error = e
-            print(f"[LLM] Attempt {attempt} failed: {e}")
+        
+        except ValueError as e:
+            log_event("llm_retry",{
+            "attempt": attempt,
+            "reason": "invalid_json",
+            "error": str(e)
+            })
+            
+            if attempt == 0:
+                messages.append({
+                    "role": "system",
+                    "content": FORMAT_CORRECTION
+                })
+            continue
+        
+    return {
+        "answer": "I couldn't generate a reliable response for that request.",
+        "confidence": 0.0,
+        "tool_request": None,
+        **make_error(
+            code="LLM_RETRY_EXAUSTED",
+            message="Model failed to produce valid output after retries",
+            retryable=False,
+        )
+    }
 
-    raise LLMError("LLM failed after max retries") from last_error
+
+
+
+
+
+def retry_backoff(attempt: int):
+    time.sleep(0.5 * (attempt +1))
+
+
+
+
+
+
+
+def generate_llm_response(messsages, config):
+    """
+    This is the ONLY place allowed to talk to an LLM.
+    Can be mocked, local, or remote.
+    """
+    return {
+        "role": "assistant",
+        "content": "Mock response (LLM not wired yet)",
+    }
+
+
+
+
+
+
+
+def make_error(code: str, message: str, retryable: bool = False):
+    return{
+        "error": {
+            "code": code,
+            "message": message,
+            "retryable": retryable,
+        }
+    }
+
+
+
+
+
+
+def log_event(event_type: str, payload: dict):
+    print(f"[{event_type}] {payload}")

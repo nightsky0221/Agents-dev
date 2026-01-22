@@ -40,6 +40,18 @@ NEW CONVERSATION:
 
 
 
+def should_summarize(conversation, max_turns=8):
+    user_turns = [
+        m for m in conversation
+        if m["role"] in ("user", "assistant")
+    ]
+    return len(user_turns) > max_turns
+
+
+
+
+
+
 
 
 # limit the summary size

@@ -44,6 +44,7 @@ def trim_memory(messages, max_memory=6):
 
 # define summarization variables
 MAX_TURN = 4
+MAX_TURNS_PER_PERSONA = 20
 
 conversation_summaries = {
     "tutor": "",
@@ -80,6 +81,9 @@ def chat(user_input, persona=None):
 # after a certain turns, we start summarization to use limited memory efficiently
 # *2 means that every conversation includes user and assistant dialogues for a couple
     if summarize.should_summarize(conversations[persona]):
+
+        # if len(conversations[persona]) > MAX_TURNS_PER_PERSONA:
+        #     conversations[persona] = conversations[persona][-MAX_TURNS_PER_PERSONA:]
 
         # extract system messages and cut the old messages from whole conversation histories.
         old_messages = conversations[persona][:-MAX_TURN]
@@ -124,13 +128,40 @@ def chat(user_input, persona=None):
     summary_text = conversation_summaries[persona]
 
     # Run Agent loop
-    parsed = run_agent_loop(
-        persona=persona,
-        persona_prompt=persona_prompt,
-        summary=summary_text,
-        conversation=conversations[persona],
-        llm_call_fn=llm.llm_call
-    )
+
+    if len(conversations[persona]) >= MAX_TURNS_PER_PERSONA:
+        return {
+            "answer": "This conversation has reached its limit. Please start a new session.",
+            "confidence": 0.0,
+            "tool_request": None,
+            "error": {
+                "code": "SESSION_LIMIT",
+                "message": "Maximum conversation length reached",
+                "retryable": False,
+            }
+        }
+
+    try:
+        parsed = run_agent_loop(
+            persona=persona,
+            persona_prompt=persona_prompt,
+            summary=summary_text,
+            conversation=conversations[persona],
+            llm_call_fn=llm.llm_call
+        )
+    except ValueError as e:
+        parsed = {
+            "answer": "I'm having trouble processing this right now. Please try again",
+            "confidence": 0.0,
+            "tool_request": None,
+        }
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        parsed = {
+            "answer": "Something went wrong, I couldn't complete your request safely.",
+            "confidence": 0.0,
+            "tool_request": None,
+        }
     
     # ensure parsed exists
     if parsed is None:
@@ -224,22 +255,25 @@ def chat_json(user_input, persona=None):
 
     # using confidence check
     issues = chk.basic_confidence_check(parsed)
-    if issues:
-        parsed["warnings"] = issues
+    parsed["warnings"] = issues or []
 
     # evaluation
-    evaluation = chk.evaluate_answer(parsed["answer"], persona)
-    
+        
+    if parsed["type"] == "chat":
+        evaluation = chk.evaluate_answer(parsed["answer"], persona)
+    else:
+        evaluation = {
+            "score": 0.0,
+            "issues": ["No answer to evaluate"]
+        }
+
     if not isinstance(evaluation, dict):
         evaluation = {
             "score": 0.0,
             "issues": ["Evaluation missing or invalid"]
         }
     
-    parsed["evaluation"] = evaluation or {
-        "score": 0.0,
-        "issues": ["Missing evaluation"]
-    }
+    parsed["evaluation"] = evaluation
     parsed["action"] = chk.decide_response_action(parsed)
 
     return parsed
@@ -272,14 +306,13 @@ def build_messages(persona_prompt, summary, conversation):
 
 
 
-
-
-
-MAX_AGENT_STEPS = 3
-
 def run_agent_loop(persona, persona_prompt, summary, conversation, llm_call_fn):
+
+    MAX_SESSION_TOKENS = 60000
+    MAX_AGENT_STEPS = 5
     parsed = None
     steps = 0
+    session_tokens = 0
 
     while steps < MAX_AGENT_STEPS:
         messages = [
@@ -297,6 +330,13 @@ def run_agent_loop(persona, persona_prompt, summary, conversation, llm_call_fn):
             {"role": m["role"], "content": m["content"]}
             for m in conversation
         ])
+
+        session_tokens += llm.estimate_token(messages)
+
+        if session_tokens > MAX_SESSION_TOKENS:
+            raise RuntimeError (
+                f"Session token budget exceeded:{session_tokens}"
+            )
 
         # Call LLM
         raw = call_llm_with_retries(

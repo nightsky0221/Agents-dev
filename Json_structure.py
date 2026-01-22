@@ -13,6 +13,25 @@ OUTPUT_SCHEMA = {
         "tool": "string",
         "arguments": "object"
     },
+    "warnings": {
+        "type": "array",
+        "items": {"type": "string"},
+        "default": []
+    },
+    "evaluation": {
+        "type": "object",
+        "properties": {
+            "score": {"type": "number"},
+            "issues": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+        },
+        "required": ["score", "issues"]
+    },
+    "action": {
+        "type": "string"
+    },
 }
 
 
@@ -60,11 +79,20 @@ RESPONSE SCHEMA:
 
 
 
-def parse_and_validate(response):
+def parse_and_validate(response) -> dict:
+    if isinstance(response, dict):
+        validate_schema(response)
+        return response
+    
+    if not isinstance(response, str):
+        raise ValueError("LLM output must be str or dict")
+    
     try:
         data = json.loads(response)
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON")
+    except json.JSONDecodeError as e:
+        raise ValueError("Invalid JSON from LLM") from e
+    
+    validate_schema(data)
     
     if "answer" not in data or "confidence" not in data:
         raise ValueError("Schema violation")
@@ -76,6 +104,40 @@ def parse_and_validate(response):
         raise ValueError("Confidence our of range")
     
     return data
+
+
+
+
+
+
+
+def validate_schema(parsed: dict):
+    if not isinstance(parsed, dict):
+        raise ValueError("Parsed output must be a dict")
+    
+    if "type" not in parsed:
+        raise ValueError("Missing required field: type")
+    
+    if parsed[type] not in ("chat", "tool", "error"):
+        raise ValueError(f"Invalid type: {parsed['type']}")
+    
+    if "content" not in parsed:
+        raise ValueError("Missing required field: content")
+    
+    # tool responses must declare tool_name and arguments
+    if parsed["type"] == "tool":
+        if not parsed.get("tool_name"):
+            raise ValueError("Tool response missing tool_name")
+        if "arguments" not in parsed:
+            raise ValueError("Tool response missing arguments")
+    
+    # optional but normalized
+    if "warnings" not in parsed:
+        parsed["warnings"] = []
+
+    return parsed
+
+
 
 
 

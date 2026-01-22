@@ -1,6 +1,10 @@
 import json
 import llm
 
+# Invariant: 'parsed' is always a validated dict
+
+
+
 
 
 
@@ -19,9 +23,6 @@ EVALUATOR_PROMPT = {
         "{ \"score\": float between 0 and 1, \"issues\": [string]}"
     )
 }
-
-
-
 
 
 

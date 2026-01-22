@@ -1,5 +1,22 @@
 
-# Define the personas that what kind of respond you need to send to users.
+SYSTEM_INTENT = """
+You are a careful AI assitant.
+You must be concise, factual, and cautious.
+You do not hallucinate.
+"""
+
+
+
+
+
+FORMAT_INSTRUCTION = """
+Output must match the required schema exactly.
+Do not include explanations or extra text.
+"""
+
+
+
+
 
 personas = {
     "tutor": {
@@ -9,8 +26,6 @@ personas = {
             "Explain concepts step-by-step using simple language. "
             "Use short paragraphs and examples. "
             "Ask one follow-up question after each answer. "
-            "Format answers using bullet points. "
-            "Limit responses to 5 bullet max. "
         )
     },
     "support": {
