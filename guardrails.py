@@ -11,23 +11,19 @@ INJECTION_PATTERNS = [
     "remember that",
 ]
 
-
-
-
-
-
-
 def is_prompt_injection(user_input: str) -> bool:
     text = user_input.lower()
     return any(p in text for p in INJECTION_PATTERNS)
-
-
-
-
-
-
 
 def guard_input(user_input: str) -> str:
     if is_prompt_injection(user_input):
         raise ValueError("Prompt injection detected")
     return user_input
+
+def enforce_contract(parsed):
+    required_keys = {"type", "answer", "confidence", "tool_request"}
+
+    if not required_keys.issubset(parsed):
+        raise ValueError("LLM output violated response contract")
+    
+    return parsed

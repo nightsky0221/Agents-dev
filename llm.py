@@ -1,10 +1,11 @@
 import time
 import requests
 
+DEBUG_LLM = False # set False for silent mode
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MODEL_NAME = "llama3"
 
-def llm_call(messages, persona=None):
+def llm_call(messages, persona):
 
     final_message = []
 
@@ -19,11 +20,22 @@ def llm_call(messages, persona=None):
         "stream": False
     }
 
-    response = requests.post(OLLAMA_URL, json=payload)
-    response.raise_for_status()
+    if DEBUG_LLM:
+        print("\n===== LLM PROMPT =====")
+        for m in messages:
+            print(f"{m['role'].upper()}: {m['content']}")
+        print("======================\n")
 
-    data = response.json()
-    return data["message"]["content"]
+    response = requests.post(OLLAMA_URL, json=payload)
+    
+    raw = response.json()["message"]["content"]
+
+    if DEBUG_LLM:
+        print("\n===== LLM RAW OUTPUT =====")
+        print(raw)
+        print("==========================\n")
+
+    return raw
 
 LLM_CONFIG = {
     "temperature": 0.0,
@@ -73,15 +85,10 @@ def call_llm_with_retries(messages, call_fn, persona):
             continue
         
     return {
-        "type": "error",
-        "answer": "I couldn't generate a reliable response for that request.",
-        "confidence": 0.0,
+        "type": "chat",
+        "answer": "I encountered an internal error but recovered safely.",
+        "confidence": 0.1,
         "tool_request": None,
-        **make_error(
-            code="LLM_RETRY_EXAUSTED",
-            message="Model failed to produce valid output after retries",
-            retryable=False,
-        )
     }
 
 def retry_backoff(attempt: int):

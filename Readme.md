@@ -1,134 +1,82 @@
+# Portfolio-Grade Autonomous AI Agent
 
-# Modular AI Chatbot & Agent Framework
+A fully self-hosted, **framework-free autonomous AI agent** built on top of an open-source LLM (LLaMA via Ollama).  
+This project demonstrates **production-grade agent architecture** including strict JSON contracts, tool execution, short‑term & long‑term memory, planning, safety guardrails, and bounded execution.
 
-## Overview
-
-This project is a **modular AI chatbot and agent framework** built on top of a local Large Language Model (LLM) using **Ollama**.  
-It demonstrates how to design a structured, safe, and extensible AI system with persona routing, tool usage, and controlled agent loops.
-
-The framework is intended for **learning, experimentation, and prototyping** modern LLM-based systems rather than direct production deployment.
+This system was intentionally built **without LangChain or external agent frameworks** to demonstrate deep understanding of how agents work internally.
 
 ---
 
-## Core Capabilities
+## 🚀 Key Features
 
-- **Persona-Based Conversation Handling**
-  - Automatically routes user queries to the most appropriate persona.
-- **Agent Loop Architecture**
-  - Enables multi-step reasoning with bounded execution.
-- **Tool Invocation**
-  - Allows the LLM to request and execute tools through a validated interface.
-- **Strict JSON Output Enforcement**
-  - Ensures predictable and machine-readable responses.
-- **Prompt Injection Guardrails**
-  - Detects and blocks common prompt-injection attempts.
-- **Conversation Memory Management**
-  - Maintains scoped memory per persona with size limits.
-- **Robust Error Handling & Retries**
-  - Handles malformed model outputs safely.
+- **Strict JSON Contract Enforcement**  
+  All LLM outputs are validated against a schema before execution.
+
+- **Tool-Using Agent**  
+  The agent can invoke tools (e.g. calculator, memory) via structured JSON.
+
+- **Short-Term Memory (Session)**  
+  Conversation summarization prevents context overflow.
+
+- **Long-Term Memory (Persistent)**  
+  Important user facts are stored in `memory.json` and persist across restarts.
+
+- **Autonomous Planning**  
+  The agent can generate internal plans and execute them step-by-step.
+
+- **Safety Guardrails**  
+  Prompt-injection detection, bounded loops, token limits, and graceful failure handling.
+
+- **Self-Hosted LLM**  
+  Uses Ollama + LLaMA locally (no paid APIs).
 
 ---
 
-## Project Structure
+## 🧠 Architecture Overview
+
+```
+User Input
+   ↓
+Persona Routing (router.py)
+   ↓
+Agent Loop (agent_loop.py)
+   ├─ Memory Injection (summary + memory.json)
+   ├─ Planning (type=plan)
+   ├─ Tool Execution (type=tool)
+   ├─ Safety Enforcement (guardrails)
+   ↓
+Validated JSON Response
+```
+
+The **agent loop is the brain** of the system. Every decision flows through it.
+
+---
+
+## 📁 Project Structure
 
 ```
 .
-├── agent_loop.py        # Core agent loop logic
-├── chatbot.py           # Chat interface and conversation manager
-├── guardrails.py        # Prompt injection protection
-├── Json_structure.py    # JSON schema definitions and validation
-├── llm.py               # LLM wrapper (Ollama integration)
-├── persona.py           # Persona definitions and system prompts
+├── agent_loop.py        # Core agent execution loop
+├── chatbot.py           # Conversation manager
+├── guardrails.py        # Input validation & contract enforcement
+├── json_structure.py    # JSON schema & validation logic
+├── llm.py               # Ollama / LLaMA interface + retry logic
+├── persona.py           # System personas & behavioral rules
 ├── router.py            # Persona routing logic
-├── tools.py             # Tool registry and execution
-├── run.py               # Example entry point
+├── summary.py           # Short-term memory summarization
+├── tools.py             # Tool registry (calculator, memory)
+├── memory.json          # Persistent long-term memory (auto-created)
+├── run.py               # Entry point / test harness
 └── README.md
 ```
 
 ---
 
-## System Architecture
+## ⚙️ Requirements
 
-```
-User Input
-   ↓
-Guardrails (Injection Detection)
-   ↓
-Persona Router
-   ↓
-Conversation Store
-   ↓
-Agent Loop
-   ├─ LLM Call
-   ├─ Tool Request (Optional)
-   └─ Tool Execution
-   ↓
-Validated JSON Response
-```
-
----
-
-## Personas
-
-Defined in `persona.py`:
-
-- **Tutor**
-  - Explains NLP, LLM, and AI concepts step-by-step.
-- **Support**
-  - Handles error reports, bugs, and product-related issues.
-- **Other**
-  - Default fallback persona.
-
-Each persona injects a system-level instruction to guide LLM behavior.
-
----
-
-## Tools
-
-Tools are defined in `tools.py` and executed only after validation.
-
-### Available Tools
-
-- **calculator**
-  - Safely evaluates mathematical expressions.
-
-Tools are:
-- Explicitly requested by the LLM
-- Validated against a registry
-- Executed in a controlled environment
-
----
-
-## JSON Response Schema
-
-All structured responses must follow this schema:
-
-```json
-{
-  "type": "chat | tool | error",
-  "answer": "string",
-  "confidence": 0.0,
-  "tool_request": null | {
-    "tool": "string",
-    "arguments": {}
-  }
-}
-```
-
-This ensures:
-- Predictable outputs
-- Safe downstream consumption
-- Reliable tool invocation
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10 or later
-- Ollama installed and running
-- `llama3` model pulled locally
+- Python **3.10+**
+- Ollama installed locally
+- LLaMA model pulled (example):
 
 ```bash
 ollama pull llama3
@@ -136,49 +84,105 @@ ollama pull llama3
 
 ---
 
-### Running the Example
+## ▶️ How to Run
 
+1. **Start Ollama**
+```bash
+ollama serve
+```
+
+2. **Run the agent**
 ```bash
 python run.py
 ```
 
-Example usage:
+3. Modify `run.py` to test:
+- memory persistence
+- tool usage
+- planning behavior
 
-```python
-response = chat("Explain tokenization in NLP.")
-print(response["answer"])
+---
+
+## 🧪 Example Capabilities
+
+### Tool Use (Calculator)
+```
+User: What is (5 + 7)?
+Agent → tool: calculator
+```
+
+### Long-Term Memory
+```
+User: I work in fintech.
+(restart program)
+User: What do you remember about me?
+```
+
+### Planning
+```
+User: Give me a 2-week plan to master LLM agents.
+Agent → type=plan → executes → final answer
 ```
 
 ---
 
-## Intended Use Cases
+## 🛡️ Safety & Reliability
 
-- Learning how LLM-based chat systems are structured
-- Experimenting with agent loops and tool calling
-- Building structured JSON-based AI APIs
-- Prototyping persona-driven chatbots
+- **Prompt injection detection**
+- **Strict schema validation**
+- **Retry + fallback on LLM failure**
+- **Max step & token limits**
+- **Guaranteed termination**
 
----
-
-## Limitations
-
-- Token estimation is approximate
-- Tools are synchronous
-- JSON compliance depends on LLM output quality
-- Not optimized for production workloads
+This ensures the agent never crashes or loops indefinitely.
 
 ---
 
-## Future Enhancements
+## 🎯 Design Philosophy
 
-- Asynchronous tool execution
-- Additional tools (search, summarization, RAG)
-- Persistent storage for conversation memory
-- Streaming responses
-- Improved token accounting
+- Explicit over implicit
+- Contracts over trust
+- Control flow > prompt magic
+- Debuggable > fancy
+
+Every component is transparent, inspectable, and replaceable.
 
 ---
 
-## License
+## 📌 Portfolio Value
 
-This project is provided for **educational and experimental purposes**.
+This project demonstrates:
+
+- Deep understanding of LLM control flow
+- Real agent architecture (not demos)
+- Tool calling & memory done correctly
+- Production-minded failure handling
+
+This is suitable for:
+- AI Engineer roles
+- LLM / Agent research
+- Systems design interviews
+
+---
+
+## 🔮 Possible Extensions
+
+- Vector-based memory retrieval
+- Multi-agent coordination
+- Evaluation harness
+- Logging & tracing
+- Web or API interface
+
+---
+
+## 🧑‍💻 Author
+
+Built as part of an advanced AI engineering curriculum focused on:
+**NLP · LLMs · Autonomous Agents · Automation**
+
+---
+
+## 📄 License
+
+MIT (or specify your own)
+

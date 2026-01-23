@@ -1,35 +1,43 @@
 import json
 import llm
 
-OUTPUT_SCHEMA = {
-    "type": "chat | tool | error",
-    "answer": "string",
-    "confidence": "number between 0 and 1",
-    "tool_request": {
-        "tool": "string",
-        "arguments": "object"
+JSON_SCHEMA = {
+    "type": "object",
+    "required": ["type", "answer", "confidence", "tool_request"],
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["chat", "tool", "error"]
+        },
+        "answer": {
+            "type": "string"
+        },
+        "confidence": {
+            "type": "number"
+        },
+        "tool_request": {
+            "tool": "calculator",
+            "arguments": { "expression": "5+7"}
+        },
     },
-}
-    
+}  
+
 JSON_SYSTEM_PROMPT = {
     "role": "system",
     "content": (
-        "You must respond ONLY in valid JSON.\n"
-        "The response must follow this format:\n\n"
+        "You must respond with exactly ONE valid JSON object.\n"
+        "The JSON must follow this structure:\n\n"
         "{\n"
         ' "type": "chat | tool | error",\n'
         ' "answer": "string",\n'
-        ' "confidence": "number between 0 and 1",\n'
-        ' "tool_request": null | { "tool": string, "arguments": object }\n'
+        ' "confidence": number,\n'
+        ' "tool_request": object | null\n'
         "}\n\n"
-        "If no tool is needed, set tool_request to null.\n"
-        "Do not include any text outside JSON"
-    )
-}
-
-TOOL_REQUEST_SCHEMA = {
-    "tool": "string",
-    "arguments": "object"
+        "Rules:\n"
+        "- Do NOT include any text outside the JSON\n"
+        "- Do NOT use markdown\n"
+        "- Do NOT explain the JSON\n"
+    ),
 }
 
 def build_json_prompt(user_input, persona_prompt):
@@ -45,56 +53,43 @@ QUESTION:
 {user_input}
 
 RESPONSE SCHEMA:
-{OUTPUT_SCHEMA}
+{JSON_SCHEMA}
 """
         }
     ]
 
-def parse_and_validate(response) -> dict:
-    if isinstance(response, dict):
-        validate_schema(response)
-        return response
-    
-    if not isinstance(response, str):
-        raise ValueError("LLM output must be str or dict")
-    
-    try:
-        data = json.loads(response)
-    except json.JSONDecodeError as e:
-        raise ValueError("Invalid JSON from LLM") from e
-    
-    validate_schema(data)
-    
-    if "answer" not in data or "confidence" not in data:
-        raise ValueError("Schema violation")
-    
-    if not isinstance(data["confidence"], (int, float)):
-        raise ValueError("Confidence must be numeric")
-    
-    if not (0 <= data["confidence"] <= 1):
-        raise ValueError("Confidence our of range")
-    
-    return data
+ALLOWED_TYPE = {
+    "chat",
+    "tool",
+    "summary",
+    "plan",
+}
 
-def validate_schema(parsed: dict):
-    if not isinstance(parsed, dict):
-        raise ValueError("Parsed output must be a dict")
+SUMMARY_SCHEMA = {
+    "type": "summary",
+    "content": str,
+}
+
+PLAN_SCHEMA = {
+    "type": "plan",
+    "steps": list,
+}
+
+def parse_and_validate(response: str) -> dict:
+    try:
+        parsed = json.loads(response)
+    except Exception:
+        raise ValueError("Invalid JSON")
     
-    if "type" not in parsed:
-        raise ValueError("Missing required field: type")
-    
-    if parsed["type"] not in ("chat", "tool", "error"):
-        raise ValueError(f"Invalid type: {parsed['type']}")
-    
-    if parsed["type"] == "chat":
-        if "answer" not in parsed:
-            raise ValueError("Missing answer")
-        if "confidence" not in parsed:
-            raise ValueError("Missing confidence")
+    for key in JSON_SCHEMA["required"]:
+        if key not in parsed:
+            raise ValueError(f"Missing key: {key}")
         
-    if parsed["type"] == "tool":
-        if "tool_request" not in parsed:
-            raise ValueError("Missing tool_request")
+    if parsed["type"] not in ("chat", "tool", "error"):
+        raise ValueError("Invalid value for 'type'")
+    
+    if not isinstance(parsed["confidence"], (int, float)):
+        raise ValueError("Invalid value for 'confidence'")
     
     return parsed
 

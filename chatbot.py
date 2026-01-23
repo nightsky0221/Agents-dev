@@ -3,14 +3,9 @@ import persona as ps
 import guardrails as gd
 import agent_loop as aloop
 
-
-
-# create conversation store to read the user requests, send reponses and save histories by per persona.
 conversations = {"tutor": [], "support": [], "other": []}
-# create global conversation manager over personas
 global_conversation = []
 
-# limit the conversation history counts
 def trim_global(messages, globe_max=50):
     return messages[-globe_max:]
 
@@ -43,11 +38,8 @@ def chat(user_input, persona=None):
         "content": user_input
     }
 
-# add user input to conversation store for suitable persona.
     conversations[persona].append(user_msg)
     global_conversation.append(user_msg)
-
-    # Run Agent loop
 
     if len(conversations[persona]) >= MAX_TURNS_PER_PERSONA:
         return {
@@ -62,7 +54,7 @@ def chat(user_input, persona=None):
         }
 
     try:
-        parsed = aloop.run_agent_loop(
+        parsed = aloop.agent_loop(
             persona=ps.personas[persona],
             conversation=conversations[persona],
         )
@@ -82,29 +74,23 @@ def chat(user_input, persona=None):
             "tool_request": None,
         }
     
-    # ensure parsed exists
     if parsed is None:
         return {"error": "Agent loop returned no response"}
 
-    # set the assistant messages
     assistant_msg = {
         "role": "assistant",
         "persona": persona,
         "content": parsed.get("answer", "")
     }
 
-    # add LLMs response to conversation
     conversations[persona].append(assistant_msg)
     global_conversation.append(assistant_msg)
     
-    # limit the conversation amounts up to its maximum size
     conversations[persona] = trim_memory(conversations[persona])
     global_conversation = trim_global(global_conversation)
 
-    # send the response to the user
     return parsed
 
-# a reset function to initialize the conversation history
 def reset_conversation():
     global global_conversation
     for persona in conversations:
@@ -117,8 +103,6 @@ def chat_json(user_input, persona=None):
     except ValueError as e:
         return {"error": str(e)}
 
-
-    # Returns a JSON-structured response validated against OUTPUT_SCHEMA
     if persona is None:
         persona = rt.route_persona(user_input)
 
@@ -129,7 +113,6 @@ def chat_json(user_input, persona=None):
         conversation=[{"role": "user", "content": user_input}]
     )
 
-    # Add retry failure
     parsed = aloop.single_step_decision(messages, persona)
 
     return parsed
